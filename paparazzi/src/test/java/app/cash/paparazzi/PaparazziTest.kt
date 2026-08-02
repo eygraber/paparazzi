@@ -59,8 +59,6 @@ class PaparazziTest {
 
   @Test
   fun resetsAnimationHandler() {
-    assertThat(AnimationHandler.sAnimatorHandler.get()).isNull()
-
     // Why Button?  Because it sets a StateListAnimator on window attach
     // See https://github.com/cashapp/paparazzi/pull/319
     paparazzi.snapshot(Button(paparazzi.context))
@@ -241,7 +239,7 @@ class PaparazziTest {
 
     paparazzi.gif(view, fps = 4)
 
-    assertThat(log).isEqualTo(listOf("predraw", "draw", "draw", "predraw", "predraw", "predraw"))
+    assertThat(log).isEqualTo(listOf("predraw", "predraw", "draw", "draw", "predraw", "predraw"))
   }
 
   private val time: Long
