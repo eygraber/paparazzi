@@ -355,6 +355,11 @@ public class PaparazziPlugin @Inject constructor(
 
       recordTaskProvider.configure { it.dependsOn(paparazziTestTaskProvider) }
       verifyTaskProvider.configure { it.dependsOn(paparazziTestTaskProvider) }
+      // Order the real writer after the real deleter when running with --parallel.
+      // The mustRunAfter between recordPaparazzi<Variant> and deletePaparazziSnapshots does not
+      // propagate to their dependencies, so without this we could erase freshly recorded snapshots.
+      testTaskProvider.configureEach { it.mustRunAfter(deleteVariantSnapshot) }
+      paparazziTestTaskProvider.configure { it.mustRunAfter(deleteVariantSnapshot) }
     }
   }
 
