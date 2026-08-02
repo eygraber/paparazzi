@@ -55,6 +55,8 @@ internal class AccessibilityElementCollector {
     }
 
   private fun View.processAccessibleChildren(processElement: (AccessibilityElement) -> Unit) {
+    if (importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS) return
+
     val accessibilityText = this.accessibilityText()
     val bounds = Rect().also { getBoundsInWindow(it, true) }
 
