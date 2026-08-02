@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
   id 'org.jetbrains.kotlin.multiplatform'
   id 'com.android.kotlin.multiplatform.library'
-  id 'app.cash.paparazzi'
+  id 'com.eygraber.paparazzi'
 }
 
 kotlin {
@@ -21,5 +21,5 @@ kotlin {
 }
 
 dependencies {
-  commonTestImplementation('app.cash.paparazzi:paparazzi:99.99.99')
+  commonTestImplementation('com.eygraber:paparazzi:99.99.99')
 }
