@@ -268,6 +268,8 @@ public class PaparazziPlugin @Inject constructor(
           )
         )
 
+        jvmArgs("-Djdk.attach.allowAttachSelf=true", "-XX:+EnableDynamicAgentLoading")
+
         // Absolute paths passed via `systemProperties` (an @Input) would pollute the build-cache
         // key and break relocatability. Supply them as @Internal JVM args instead (#1874); task
         // content is tracked separately via the path-sensitive file inputs below.

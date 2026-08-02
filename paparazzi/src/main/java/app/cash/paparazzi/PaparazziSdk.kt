@@ -75,7 +75,6 @@ import com.android.tools.idea.validator.LayoutValidator
 import com.android.tools.idea.validator.ValidatorData.Level
 import com.android.tools.idea.validator.ValidatorData.Policy
 import com.android.tools.idea.validator.ValidatorData.Type
-import net.bytebuddy.agent.ByteBuddyAgent
 import java.awt.geom.Ellipse2D
 import java.awt.image.BufferedImage
 import java.util.EnumSet
@@ -145,7 +144,6 @@ public class PaparazziSdk @JvmOverloads constructor(
     if (!isInitialized) {
       registerViewEditModeInterception()
 
-      ByteBuddyAgent.install()
       InterceptorRegistrar.registerMethodInterceptors()
     }
   }
