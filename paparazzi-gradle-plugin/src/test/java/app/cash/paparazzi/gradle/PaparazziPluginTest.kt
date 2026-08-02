@@ -756,7 +756,7 @@ class PaparazziPluginTest {
       .withArguments("verifyPaparazziDebug", "--stacktrace")
       .runFixture(fixtureRoot) { build() }
 
-    assertThat(result.task(":testDebugUnitTest")?.outcome).isEqualTo(SUCCESS)
+    assertThat(result.task(":testPaparazziDebug")?.outcome).isEqualTo(SUCCESS)
     assertThat(stale.exists()).isFalse()
   }
 
@@ -779,7 +779,7 @@ class PaparazziPluginTest {
       .withArguments("recordPaparazziDebug", "--stacktrace")
       .runFixture(fixtureRoot) { build() }
 
-    assertThat(result.task(":testDebugUnitTest")?.outcome).isEqualTo(SUCCESS)
+    assertThat(result.task(":testPaparazziDebug")?.outcome).isEqualTo(SUCCESS)
     assertThat(stale.exists()).isTrue()
   }
 
