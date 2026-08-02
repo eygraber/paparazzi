@@ -756,13 +756,20 @@ class PaparazziPluginTest {
       .withArguments("verifyPaparazziDebug", "--stacktrace")
       .runFixture(fixtureRoot) { build() }
 
-    assertThat(result.task(":testDebugUnitTest")?.outcome).isEqualTo(SUCCESS)
+    assertThat(result.task(":testPaparazziDebug")?.outcome).isEqualTo(SUCCESS)
     assertThat(stale.exists()).isFalse()
   }
 
   @Test
   fun recordPreservesFailures() {
     val fixtureRoot = File("src/test/projects/verify-mode-success")
+
+    // Prime the fixture with a verify run so Gradle records ownership of the failures dir;
+    // otherwise stale output cleanup deletes the planted file on a fresh fixture.
+    gradleRunner
+      .withArguments("verifyPaparazziDebug", "--stacktrace")
+      .runFixture(fixtureRoot) { build() }
+
     val failureDir = File(fixtureRoot, "build/paparazzi/failures/debug").registerForDeletionOnExit()
     failureDir.mkdirs()
     val stale = File(failureDir, "stale.txt")
@@ -772,7 +779,7 @@ class PaparazziPluginTest {
       .withArguments("recordPaparazziDebug", "--stacktrace")
       .runFixture(fixtureRoot) { build() }
 
-    assertThat(result.task(":testDebugUnitTest")?.outcome).isEqualTo(SUCCESS)
+    assertThat(result.task(":testPaparazziDebug")?.outcome).isEqualTo(SUCCESS)
     assertThat(stale.exists()).isTrue()
   }
 
