@@ -1,6 +1,6 @@
 plugins {
   id 'com.android.dynamic-feature'
-  id 'app.cash.paparazzi'
+  id 'com.eygraber.paparazzi'
 }
 
 android {

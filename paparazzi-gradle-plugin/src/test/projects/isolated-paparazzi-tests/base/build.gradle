@@ -15,6 +15,6 @@ android {
 }
 
 dependencies {
-  api "app.cash.paparazzi:paparazzi:2.0.0-SNAPSHOT"
+  api "com.eygraber:paparazzi:2.0.0-SNAPSHOT"
   api libs.junit
 }
