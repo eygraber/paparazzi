@@ -21,6 +21,7 @@ import android.content.res.Resources
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Handler_Delegate
+import android.os.Looper_Accessor
 import android.util.AttributeSet
 import android.util.DisplayMetrics
 import android.view.BridgeInflater
@@ -32,6 +33,7 @@ import android.view.View
 import android.view.View.NO_ID
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams
+import android.view.ViewRootImpl_Accessor
 import androidx.activity.setViewTreeOnBackPressedDispatcherOwner
 import androidx.annotation.LayoutRes
 import androidx.compose.runtime.Composable
@@ -63,8 +65,6 @@ import com.android.ide.common.rendering.api.SessionParams
 import com.android.ide.common.rendering.api.SessionParams.RenderingMode
 import com.android.internal.lang.System_Delegate
 import com.android.layoutlib.bridge.Bridge
-import com.android.layoutlib.bridge.Bridge.cleanupThread
-import com.android.layoutlib.bridge.Bridge.prepareThread
 import com.android.layoutlib.bridge.BridgeRenderSession
 import com.android.layoutlib.bridge.impl.RenderAction
 import com.android.layoutlib.bridge.impl.RenderSessionImpl
@@ -173,7 +173,6 @@ public class PaparazziSdk @JvmOverloads constructor(
 
     val sessionParams = sessionParamsBuilder.build()
     renderSession = createRenderSession(sessionParams)
-    prepareThread()
     renderSession.init(sessionParams.timeout)
     Bitmap.setDefaultDensity(DisplayMetrics.DENSITY_DEVICE_STABLE)
 
@@ -188,7 +187,7 @@ public class PaparazziSdk @JvmOverloads constructor(
   public fun teardown() {
     renderSession.release()
     bridgeRenderSession.dispose()
-    cleanupThread()
+    Looper_Accessor.cleanupThread()
 
     renderer.dumpDelegates()
     logger.assertNoErrors()
@@ -233,7 +232,7 @@ public class PaparazziSdk @JvmOverloads constructor(
     logger.flushErrors()
     renderSession.release()
     bridgeRenderSession.dispose()
-    cleanupThread()
+    Looper_Accessor.cleanupThread()
 
     sessionParamsBuilder = sessionParamsBuilder
       .copy(
@@ -257,7 +256,6 @@ public class PaparazziSdk @JvmOverloads constructor(
 
     val sessionParams = sessionParamsBuilder.build()
     renderSession = createRenderSession(sessionParams)
-    prepareThread()
     renderSession.init(sessionParams.timeout)
     Bitmap.setDefaultDensity(DisplayMetrics.DENSITY_DEVICE_STABLE)
     bridgeRenderSession = createBridgeSession(renderSession, renderSession.inflate())
@@ -330,6 +328,14 @@ public class PaparazziSdk @JvmOverloads constructor(
       }
 
       viewGroup.addView(modifiedView)
+
+      // See [sizeShrinkWindowFrameToDevice]. In SHRINK mode layoutlib 16.2.3 leaves the window frame
+      // collapsed to 0x0 after inflating the (empty) content, which corrupts Compose state derived
+      // from the first measured size. Restore a sane window frame before the first frame is rendered.
+      if (sessionParamsBuilder.build().renderingMode == RenderingMode.SHRINK) {
+        sizeShrinkWindowFrameToDevice(viewGroup)
+      }
+
       for (frame in 0 until frameCount) {
         val nowNanos = (startNanos + (frame * 1_000_000_000.0 / fps)).toLong()
 
@@ -392,10 +398,35 @@ public class PaparazziSdk @JvmOverloads constructor(
       val choreographer = Choreographer.getInstance()
       val mLastFrameTimeNanos = choreographer::class.java.getDeclaredField("mLastFrameTimeNanos")
       mLastFrameTimeNanos.isAccessible = true
-      mLastFrameTimeNanos.set(choreographer, 0L)
+      mLastFrameTimeNanos.set(choreographer, Long.MIN_VALUE)
 
       Thread.setDefaultUncaughtExceptionHandler(previousUncaughtExceptionHandler)
     }
+  }
+
+  /**
+   * layoutlib 16.2.3's `RenderSessionImpl.inflate()` eagerly measures the content and sizes the
+   * `ViewRootImpl` window frame (`mWinFrame`) to the measured content size. Paparazzi attaches the
+   * test content *after* `inflate()`, so in [RenderingMode.SHRINK] — where the window shrinks to the
+   * content in both dimensions — the window frame collapses to `0x0` (the empty inflate-time size)
+   * and stays that way until the first `render()` re-measures it. (Other rendering modes keep the
+   * device size in at least one dimension, so they never fully collapse.)
+   *
+   * Compose reads that stale `0x0` window frame during the first frame-clock pass, so any state
+   * derived from the measured size (e.g. `AnchoredDraggableState` anchors computed in
+   * `onSizeChanged`) is first resolved at `0x0` and then settles on the wrong value when the real
+   * measure arrives. Resetting the frame to the device size here lets the first frame-clock measure
+   * observe a sane window, matching pre-16.2.3 behavior; the subsequent `render()` re-shrinks the
+   * frame to the true content size for the captured image.
+   *
+   * We set the frame directly rather than calling [RenderSessionImpl.measure] because that would run
+   * an extra traversal/scroll pass whose process-global side effects (shared `Looper`/animation
+   * state) leak into later snapshots on the same thread. No-ops on layoutlib versions that don't
+   * expose `ViewRootImpl_Accessor.updateFrame`.
+   */
+  private fun sizeShrinkWindowFrameToDevice(contentView: View) {
+    val displayMetrics = contentView.context.resources.displayMetrics
+    ViewRootImpl_Accessor.updateFrame(contentView.viewRootImpl, displayMetrics.widthPixels, displayMetrics.heightPixels)
   }
 
   private fun withTime(timeNanos: Long, block: () -> Unit) {
@@ -408,13 +439,33 @@ public class PaparazziSdk @JvmOverloads constructor(
     try {
       executeHandlerCallbacks()
       val currentTimeNanos = uptimeNanos()
-      /**
-       * The choreographer needs to be manually ticked in order for the frame time to become visible to the native layer
-       * which is necessary in order for ripples to work is compose, as well as view animation classes.
-       *
-       * After frame is run, we have to reset sChoreographerTime since [com.android.layoutlib.bridge.SessionInteractiveData.getNanosTime]
-       * uses sChoreographerTime to calculate nanoTime via [System_Delegate.nanoTime].
-       */
+
+      // layoutlib 16.2.3's Choreographer#doFrame dispatches the animation callbacks itself, but a
+      // re-posted callback (dueTime = uptimeMillis()) becomes due again within the same frame and
+      // fires a second time. To keep exactly one dispatch per frame (matching pre-16.2.3 behavior),
+      // run the animation callbacks manually once at [currentTimeNanos] - the same instant doFrame
+      // would have used - then tick doFrame with sChoreographerTime zeroed so its internal dispatch
+      // finds the re-posted callbacks not-yet-due and skips them (while still signalling the native
+      // HWUI layer so ripples and view animations work).
+      val choreographerCallbacks = RenderAction.getCurrentContext()
+        .sessionInteractiveData
+        .choreographerCallbacks
+
+      val choreographer = Choreographer.getInstance()
+      val mCallbacksRunning = choreographer::class.java.getDeclaredField("mCallbacksRunning")
+      mCallbacksRunning.isAccessible = true
+      val mLastFrameTimeNanos = choreographer::class.java.getDeclaredField("mLastFrameTimeNanos")
+      mLastFrameTimeNanos.isAccessible = true
+
+      mLastFrameTimeNanos.set(choreographer, currentTimeNanos)
+      mCallbacksRunning.set(choreographer, true)
+      try {
+        choreographerCallbacks.execute(currentTimeNanos, Bridge.getLog())
+      } finally {
+        mCallbacksRunning.set(choreographer, false)
+      }
+
+      Choreographer_Delegate.sChoreographerTime = 0
       Choreographer_Delegate.doFrame(currentTimeNanos)
 
       return block()
