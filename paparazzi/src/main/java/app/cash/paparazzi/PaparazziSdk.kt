@@ -21,6 +21,7 @@ import android.content.res.Resources
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Handler_Delegate
+import android.os.Looper
 import android.os.Looper_Accessor
 import android.util.AttributeSet
 import android.util.DisplayMetrics
@@ -307,7 +308,8 @@ public class PaparazziSdk @JvmOverloads constructor(
         // async to our test Handler. By initializing Recomposer with Dispatchers.Main, Delay will now be backed by our test Handler,
         // synchronizing expected behavior.
         WindowRecomposerPolicy.setFactory {
-          val windowRecomposer = it.createLifecycleAwareWindowRecomposer(MAIN_DISPATCHER)
+          val dispatcher = Handler(Looper.getMainLooper()).asCoroutineDispatcher("Paparazzi-Main")
+          val windowRecomposer = it.createLifecycleAwareWindowRecomposer(dispatcher)
           recomposer = windowRecomposer
           return@setFactory windowRecomposer
         }
@@ -673,10 +675,6 @@ public class PaparazziSdk @JvmOverloads constructor(
     internal val isInitialized get() = ::renderer.isInitialized
 
     internal lateinit var sessionParamsBuilder: SessionParamsBuilder
-
-    private val MAIN_DISPATCHER by lazy {
-      Handler.getMain().asCoroutineDispatcher("Paparazzi-Main")
-    }
 
     private val hasComposeRuntime: Boolean = isPresentInClasspath(
       "androidx.compose.runtime.snapshots.SnapshotKt",
