@@ -17,6 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/eygraber'
 
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
