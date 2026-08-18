@@ -22,11 +22,20 @@ import org.junit.Rule
 import org.junit.Test
 
 class BuildClassTest {
+  companion object {
+    // Loads android.os.Build when this test class initializes, before any Paparazzi instance
+    // exists. Test infrastructure (Robolectric runners, base-class companions) does this in real
+    // projects, and Paparazzi must still be able to rewrite Build's fields afterwards.
+    private val earlySdkInt = Build.VERSION.SDK_INT
+  }
+
   @get:Rule
   val paparazzi = Paparazzi()
 
   @Test
   fun verifyFields() {
+    assertThat(earlySdkInt).isAtLeast(0)
+
     assertThat(Build.ID).isNotNull()
     assertThat(Build.DISPLAY).contains("test-keys")
     assertThat(Build.PRODUCT).isEqualTo("unknown")

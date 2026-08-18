@@ -25,10 +25,28 @@ internal class PaparazziTestReporter(
   private val diffRegistryFactory: () -> Map<Pair<String, String>, DiffImage>
 ) : TestReporter {
   init {
-    // Rather than copy SimpleHtmlWriter, let's append our desired tags to the allowlist
-    val declaredField = SimpleHtmlWriter::class.java.getFieldReflectively("VALID_HTML_TAGS")
+    // Rather than copy SimpleHtmlWriter, let's append our desired tags to the allowlist.
+    // The field is static final, so mutate the set in place instead of replacing it; writing
+    // final fields requires sun.misc.Unsafe methods that newer JDKs disallow.
+    val validHtmlTags = SimpleHtmlWriter::class.java.getDeclaredField("VALID_HTML_TAGS")
+      .also { it.isAccessible = true }
+      .get(null)
+
     @Suppress("UNCHECKED_CAST")
-    declaredField.setStaticValue(declaredField.get(null) as Set<String> + setOf("img", "details", "summary"))
+    val tags = validHtmlTags as MutableSet<String>
+    val tagsToAdd = setOf("img", "details", "summary")
+    try {
+      tags.addAll(tagsToAdd)
+    } catch (e: UnsupportedOperationException) {
+      // Collections.unmodifiableSet wrapper (Gradle 9+); mutate its backing set. The Gradle
+      // daemon always runs with --add-opens=java.base/java.util=ALL-UNNAMED.
+      val backingField = Class.forName("java.util.Collections\$UnmodifiableCollection")
+        .getDeclaredField("c")
+        .also { it.isAccessible = true }
+
+      @Suppress("UNCHECKED_CAST")
+      (backingField.get(validHtmlTags) as MutableCollection<String>).addAll(tagsToAdd)
+    }
   }
 
   override fun generateReport(testResultsProvider: TestResultsProvider, reportDir: File) {

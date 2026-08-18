@@ -13,6 +13,9 @@ paparazzi.gif {
 }
 ```
 
+### Fixed
+* Stop using terminally deprecated `sun.misc.Unsafe` memory-access methods, which newer JDKs warn on and will disallow; static `Build` fields are now made non-final at class load and set with plain reflection
+
 ## [2.0.0-alpha05] - 2026-05-20
 
 This release supports pre-AGP 9.0 consumers.

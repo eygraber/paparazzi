@@ -23,6 +23,14 @@ configurations {
 aar2jar.configureForConfiguration("compileOnly")
 aar2jar.configureForConfiguration("testImplementation")
 
+tasks.named('jar') {
+  manifest {
+    // The Gradle plugin passes this jar to test JVMs via -javaagent so PaparazziAgent can
+    // transform android.os.Build before any test code loads it.
+    attributes('Premain-Class': 'app.cash.paparazzi.agent.PaparazziAgent')
+  }
+}
+
 dependencies {
   registerTransform(org.gradle.api.internal.artifacts.transform.UnzipTransform) {
     from.attribute(AndroidArtifacts.ARTIFACT_TYPE, ArtifactTypeDefinition.JAR_TYPE)
