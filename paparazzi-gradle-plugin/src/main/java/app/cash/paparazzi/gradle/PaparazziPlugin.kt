@@ -268,7 +268,12 @@ public class PaparazziPlugin @Inject constructor(
           )
         )
 
-        jvmArgs("-Djdk.attach.allowAttachSelf=true", "-XX:+EnableDynamicAgentLoading")
+        jvmArgs(
+          "-Djdk.attach.allowAttachSelf=true",
+          "-XX:+EnableDynamicAgentLoading",
+          // Layoutlib calls System.load, a restricted method since JDK 24 (JEP 472).
+          "--enable-native-access=ALL-UNNAMED"
+        )
 
         // Absolute paths passed via `systemProperties` (an @Input) would pollute the build-cache
         // key and break relocatability. Supply them as @Internal JVM args instead (#1874); task
