@@ -61,6 +61,15 @@ class PaparazziPluginTest {
   }
 
   @Test
+  fun composeSecureTextField() {
+    val fixtureRoot = File("src/test/projects/secure-text-field")
+
+    gradleRunner
+      .withArguments("testDebug", "--stacktrace")
+      .runFixture(fixtureRoot) { build() }
+  }
+
+  @Test
   fun supportsJunitJupiterLibrary() {
     val fixtureRoot = File("src/test/projects/supports-junit-jupiter")
 
