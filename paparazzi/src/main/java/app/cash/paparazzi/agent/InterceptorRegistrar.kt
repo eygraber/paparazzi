@@ -23,6 +23,12 @@ internal object InterceptorRegistrar {
     val instrumentation = AgentInstaller.install()
 
     for ((className, methodNamesToInterceptors) in pendingInterceptors) {
+      val targetClass = try {
+        ClassLoader.getSystemClassLoader().loadClass(className)
+      } catch (e: ClassNotFoundException) {
+        continue
+      }
+
       val interceptorMap = methodNamesToInterceptors.associate { (name, clazz) -> name to clazz }
       val transformer = object : ClassFileTransformer {
         override fun transform(
@@ -39,7 +45,6 @@ internal object InterceptorRegistrar {
 
       instrumentation.addTransformer(transformer, true)
       try {
-        val targetClass = ClassLoader.getSystemClassLoader().loadClass(className)
         instrumentation.retransformClasses(targetClass)
       } finally {
         instrumentation.removeTransformer(transformer)
