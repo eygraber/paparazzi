@@ -23,6 +23,7 @@ import android.view.ViewGroup.LayoutParams
 import androidx.annotation.LayoutRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
+import app.cash.paparazzi.agent.FinalFieldStripper
 import com.android.ide.common.rendering.api.SessionParams.RenderingMode
 import org.junit.rules.TestRule
 import org.junit.runner.Description
@@ -76,6 +77,15 @@ public class Paparazzi @JvmOverloads constructor(
   ) {
     this.validateAccessibility = validateAccessibility
   }
+  init {
+    // Fallback for JVMs launched without the Gradle plugin's -javaagent (see PaparazziAgent):
+    // JUnit instantiates the test class before applying rules, and test-class initializers can
+    // load android.os.Build (e.g. through Dispatchers.resetMain()), so registering in
+    // PaparazziSdk.setup() would be too late. Attach failures are swallowed here; setup()
+    // registers again and surfaces them.
+    runCatching { FinalFieldStripper.stripFinalFromStaticFields("android.os.Build") }
+  }
+
   private lateinit var sdk: PaparazziSdk
   private lateinit var frameHandler: SnapshotHandler.FrameHandler
   private var testName: TestName? = null

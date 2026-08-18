@@ -48,6 +48,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import app.cash.paparazzi.accessibility.AccessibilityRenderExtension
+import app.cash.paparazzi.agent.FinalFieldStripper
 import app.cash.paparazzi.agent.InterceptorRegistrar
 import app.cash.paparazzi.internal.ImageUtils
 import app.cash.paparazzi.internal.PaparazziCallback
@@ -145,6 +146,10 @@ public class PaparazziSdk @JvmOverloads constructor(
 
   public fun setup() {
     if (!isInitialized) {
+      // Must be registered before anything below loads android.os.Build, so its static fields
+      // can be made non-final at class load and later set via reflection.
+      FinalFieldStripper.stripFinalFromStaticFields("android.os.Build")
+
       registerViewEditModeInterception()
       registerShowSecretsSettingInterception()
 
@@ -158,8 +163,19 @@ public class PaparazziSdk @JvmOverloads constructor(
     layoutlibCallback.initResources()
 
     if (!isInitialized) {
-      renderer = Renderer(environment, layoutlibCallback, logger)
-      sessionParamsBuilder = renderer.prepare()
+      initializationFailure?.let {
+        throw IllegalStateException("Paparazzi initialization failed earlier in this test process", it)
+      }
+      val newRenderer = Renderer(environment, layoutlibCallback, logger)
+      try {
+        sessionParamsBuilder = newRenderer.prepare()
+      } catch (t: Throwable) {
+        initializationFailure = t
+        throw t
+      }
+      // Assign last: isInitialized checks this property, and a partially-initialized companion
+      // would fail later tests in this process with a misleading lateinit error.
+      renderer = newRenderer
     }
     forcePlatformSdkVersion(environment.compileSdkVersion)
 
@@ -686,6 +702,8 @@ public class PaparazziSdk @JvmOverloads constructor(
   internal companion object {
     internal lateinit var renderer: Renderer
     internal val isInitialized get() = ::renderer.isInitialized
+
+    private var initializationFailure: Throwable? = null
 
     internal lateinit var sessionParamsBuilder: SessionParamsBuilder
 

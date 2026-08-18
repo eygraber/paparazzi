@@ -46,6 +46,7 @@ import org.gradle.api.logging.LogLevel.LIFECYCLE
 import org.gradle.api.provider.Provider
 import org.gradle.api.provider.ProviderFactory
 import org.gradle.api.reporting.ReportingExtension
+import org.gradle.api.tasks.Classpath
 import org.gradle.api.tasks.Delete
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.PathSensitivity
@@ -111,6 +112,7 @@ public class PaparazziPlugin @Inject constructor(
 
     val layoutlibNativeRuntimeFileCollection = project.setupLayoutlibRuntimeDependency()
     val layoutlibResourcesFileCollection = project.setupLayoutlibResourcesDependency()
+    val paparazziAgentFileCollection = project.setupAgentDependency()
 
     // Create anchor tasks for all variants.
     val verifyVariants = project.tasks.register("verifyPaparazzi") {
@@ -274,6 +276,7 @@ public class PaparazziPlugin @Inject constructor(
           // Layoutlib calls System.load, a restricted method since JDK 24 (JEP 472).
           "--enable-native-access=ALL-UNNAMED"
         )
+        jvmArgumentProviders.add(PaparazziAgentArgumentProvider(paparazziAgentFileCollection))
 
         // Absolute paths passed via `systemProperties` (an @Input) would pollute the build-cache
         // key and break relocatability. Supply them as @Internal JVM args instead (#1874); task
@@ -630,6 +633,21 @@ public class PaparazziPlugin @Inject constructor(
       .files
   }
 
+  private fun Project.setupAgentDependency(): FileCollection {
+    val agentConfiguration = configurations.create("paparazziAgent") { config ->
+      config.isCanBeConsumed = false
+      config.isTransitive = false
+    }
+    agentConfiguration.dependencies.add(
+      if (isInternal()) {
+        dependencies.project(mapOf("path" to ":paparazzi"))
+      } else {
+        dependencies.create("com.eygraber:paparazzi:$VERSION")
+      }
+    )
+    return agentConfiguration
+  }
+
   private fun Project.addTestDependency() {
     val dependency = if (isInternal()) {
       dependencies.project(mapOf("path" to ":paparazzi"))
@@ -737,6 +755,16 @@ public class PaparazziPlugin @Inject constructor(
       .toIntOrNull()
     return agpMajor != null && agpMajor >= major
   }
+}
+
+/**
+ * Attaches [app.cash.paparazzi.agent.PaparazziAgent] so android.os.Build can be transformed
+ * before any test class loads it.
+ */
+internal class PaparazziAgentArgumentProvider(
+  @get:Classpath val agentJar: FileCollection
+) : CommandLineArgumentProvider {
+  override fun asArguments(): Iterable<String> = listOf("-javaagent:${agentJar.singleFile.absolutePath}")
 }
 
 /** Passes absolute-path system properties as `-D` JVM args without adding them to the cache key (#1874). */
